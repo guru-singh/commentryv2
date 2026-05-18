@@ -5,34 +5,34 @@ const axios = require('axios');
 const app = express();
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json()); // JSON body ke liye
+app.use(express.json());
 
 // ==================== DISCOVER TRENDING ====================
 async function discoverTrending(userTopic = "") {
   try {
-   
     const now = new Date();
-    const monthName = now.toLocaleString('default', { month: 'long' });   // May
-    const year = now.getFullYear();                                      // 2026
-    const currentPeriod = `${monthName} ${year}`;                        // "May 2026"
+    const monthName = now.toLocaleString('default', { month: 'long' });
+    const year = now.getFullYear();
+    const currentPeriod = `${monthName} ${year}`;
+
     let query = "";
 
     if (userTopic && userTopic.trim() !== "") {
-      // User ne kuch topic daala hai
       query = `"${userTopic}"`;
     } else {
-      // Blank chhoda hai toh general trending
-      query = "trending celebrities India today OR trending news India OR Bollywood trending OR IPL OR Met Gala ${currentPeriod}";
+      query = `trending celebrities India ${currentPeriod} OR trending news India ${currentPeriod} OR Bollywood trending ${currentPeriod} OR IPL ${currentPeriod} OR Met Gala ${currentPeriod} OR Fifa world cup ${currentPeriod}`;
     }
-    
+   // console.log("Tavily query:", query);
+
     const res = await axios.post("https://api.tavily.com/search", {
       api_key: process.env.TAVILY_API_KEY,
       query: query,
       search_depth: "advanced",
       topic: "news",
       time_range: "day",
-      max_results: 8,
-      include_answer: true
+      max_results: 4,
+      include_answer: "advanced",
+      include_images: true          // ← Images enable kiya
     });
 
     return {
@@ -45,7 +45,7 @@ async function discoverTrending(userTopic = "") {
   }
 }
 
-// ==================== GENERATE ONE COMBINED POST ====================
+// ==================== GENERATE ONE COMBINED POST + BEST IMAGE ====================
 app.post('/generate-post', async (req, res) => {
   const { trendingData, topic } = req.body;
 
@@ -54,13 +54,14 @@ app.post('/generate-post', async (req, res) => {
   }
 
   try {
+    // Combine text for Grok
     let combined = `Topic: ${topic || 'Trending'}\n\nAI Summary: ${trendingData.summary}\n\n`;
-
     trendingData.topics.slice(0, 4).forEach((item, i) => {
       combined += `Source ${i+1}: ${item.title}\n`;
       if (item.content) combined += `${item.content.substring(0, 300)}...\n\n`;
     });
 
+    // Grok se strong post generate
     const grokRes = await axios.post("https://api.x.ai/v1/chat/completions", {
       model: "grok-3",
       messages: [{
@@ -75,10 +76,36 @@ app.post('/generate-post', async (req, res) => {
     }, {
       headers: { Authorization: `Bearer ${process.env.GROK_API_KEY}` }
     });
-
+    //console.log("Grok response:", grokRes.data);
     const finalPost = grokRes.data.choices[0].message.content.trim();
 
-    res.json({ success: true, post: finalPost });
+    // ==================== BEST IMAGE SELECT ====================
+    let bestImage = "";
+    const searchTerm = (topic || "").toLowerCase();
+
+    for (let item of trendingData.topics) {
+      if (item.images && item.images.length > 0) {
+        const titleLower = item.title.toLowerCase();
+        const contentLower = (item.content || "").toLowerCase();
+
+        if (titleLower.includes(searchTerm) || contentLower.includes(searchTerm)) {
+          bestImage = item.images[0];
+          break;
+        }
+      }
+    }
+
+    // Fallback: Pehli image le lo
+    if (!bestImage && trendingData.topics[0]?.images?.length > 0) {
+      bestImage = trendingData.topics[0].images[0];
+    }
+
+    res.json({
+      success: true,
+      post: finalPost,
+      image: bestImage
+    });
+
   } catch (e) {
     console.log("Generate post error:", e.message);
     res.json({ success: false, post: "Error generating post" });
@@ -98,4 +125,4 @@ app.post('/discover', async (req, res) => {
 
 app.listen(8080, () => {
   console.log("🚀 @inlast5mins Dashboard running at http://localhost:8080");
-}); 
+});

@@ -48,7 +48,7 @@
             <% trending.topics.slice(0,4).forEach((item, i) => { %>
               <div class="bg-zinc-900 p-4 rounded-2xl">
                 <strong><%= i+1 %>. <%= item.title %></strong><br>
-                <small class="text-zinc-400"><%= item.description || 'No description available' %></small><br>
+                <small class="text-zinc-400"><%= item.content || 'No description available' %></small><br>
                 <small class="text-zinc-400"><%= item.published_date ? new Date(item.published_date).toLocaleDateString('en-IN') : 'Recent' %></small>
                 <small class="text-zinc-400"><a href="<%= item.url %>" target="_blank" class="text-emerald-400 hover:underline">Read more</a></small>
               </div>
@@ -80,69 +80,74 @@
   </div>
 
   <script>
-  // Trending data ko safely parse kar rahe hain
-  let currentTrendingData = null;
-  let currentTopic = "<%= topic || '' %>";
-  let currentPostText = "";
+    // Trending data ko EJS se JS mein safely load kar rahe hain
+    let currentTrendingData = null;
+    let currentTopic = "<%= topic || '' %>";
+    let currentPostText = "";
 
-  try {
-    const inputEl = document.querySelector('input[name="trendingData"]');
-    if (inputEl && inputEl.value) {
-      currentTrendingData = JSON.parse(inputEl.value);
-    }
-  } catch (e) {
-    console.error("Error parsing trendingData:", e);
-  }
-
-  console.log("Loaded Trending Data:", currentTrendingData);   // Debug ke liye
-
-  async function generateCombinedPost() {
-    if (!currentTrendingData || !currentTrendingData.topics || currentTrendingData.topics.length === 0) {
-      alert("Pehle Search button se trending results fetch karo!");
-      return;
-    }
-
-    const btn = event.target;
-    const originalText = btn.innerHTML;
-    btn.innerHTML = "Generating...";
-    btn.disabled = true;
-
+    // Hidden input se data parse karo
     try {
-      const res = await fetch('/generate-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trendingData: currentTrendingData,
-          topic: currentTopic
-        })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        document.getElementById('postArea').innerHTML = `<p>${data.post}</p>`;
-        currentPostText = data.post;
-      } else {
-        alert("Error generating post");
+      const inputEl = document.querySelector('input[name="trendingData"]');
+      if (inputEl && inputEl.value && inputEl.value !== '{}') {
+        currentTrendingData = JSON.parse(inputEl.value);
       }
-    } catch (err) {
-      console.error(err);
-      alert("Network error. Console check karo.");
+    } catch (e) {
+      console.error("Error parsing trendingData:", e);
     }
 
-    btn.innerHTML = originalText;
-    btn.disabled = false;
-  }
+    console.log("Loaded Trending Data:", currentTrendingData); // Debug ke liye
 
-  function copyCurrentPost() {
-    if (currentPostText) {
-      navigator.clipboard.writeText(currentPostText).then(() => {
-        alert("✅ Post copied to clipboard!");
-      });
-    } else {
-      alert("Pehle post generate karo!");
+    async function generateCombinedPost() {
+      if (!currentTrendingData || !currentTrendingData.topics || currentTrendingData.topics.length === 0) {
+        alert("Pehle Search button se trending results fetch karo!");
+        return;
+      }
+
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = "Generating...";
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/generate-post', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            trendingData: currentTrendingData,
+            topic: currentTopic
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          let html = `<p>${data.post}</p>`;
+          if (data.image) {
+            html += `<img src="${data.image}" class="mt-4 rounded-2xl w-full" alt="Post Image">`;
+          }
+          document.getElementById('postArea').innerHTML = html;
+          currentPostText = data.post;
+        } else {
+          alert("Error generating post");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Network error. Console check karo.");
+      }
+
+      btn.innerHTML = originalText;
+      btn.disabled = false;
     }
-  }
-</script>
+
+    function copyCurrentPost() {
+      if (currentPostText) {
+        navigator.clipboard.writeText(currentPostText).then(() => {
+          alert("✅ Post copied to clipboard!");
+        });
+      } else {
+        alert("Pehle post generate karo!");
+      }
+    }
+  </script>
 </body>
 </html>
