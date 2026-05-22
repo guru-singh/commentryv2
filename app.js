@@ -54,19 +54,19 @@ app.post('/generate-post', async (req, res) => {
   }
 
   try {
-    // Combine text for Grok
+    // Text combine
     let combined = `Topic: ${topic || 'Trending'}\n\nAI Summary: ${trendingData.summary}\n\n`;
     trendingData.topics.slice(0, 4).forEach((item, i) => {
       combined += `Source ${i+1}: ${item.title}\n`;
       if (item.content) combined += `${item.content.substring(0, 300)}...\n\n`;
     });
 
-    // Grok se strong post generate
+    // Grok se text post
     const grokRes = await axios.post("https://api.x.ai/v1/chat/completions", {
       model: "grok-3",
       messages: [{
         role: "system",
-        content: "You are a sharp X content writer for @inlast5mins. Combine multiple sources + AI summary into ONE strong, natural and exciting X post. Max 260 characters. Use emojis naturally. Make it feel like 'In Last 5 Mins' breaking news."
+        content: "You are a sharp X content writer for @inlast5mins. Combine multiple sources into ONE strong, natural and exciting X post. Max 260 characters. Use emojis naturally."
       }, {
         role: "user",
         content: combined + "\n\nEk hi bahut powerful X post banao."
@@ -76,26 +76,29 @@ app.post('/generate-post', async (req, res) => {
     }, {
       headers: { Authorization: `Bearer ${process.env.GROK_API_KEY}` }
     });
-    //console.log("Grok response:", grokRes.data);
+
     const finalPost = grokRes.data.choices[0].message.content.trim();
 
-    // ==================== BEST IMAGE SELECT ====================
+    // Grok Imagine ke liye best prompt
+    //const grokImagePrompt = `Create a cinematic, high-quality, dramatic vertical image for X post about "${topic}". Modern news style, dark background, neon accents, high contrast, eye-catching and viral. Show relevant action, emotion or atmosphere related to ${topic}. Professional sports/news photography style.`;
+    const grokImagePrompt = `Create a cinematic, high-quality, dramatic vertical image for an X post about "${topic}". 
+        Modern premium editorial news style, clean sophisticated lighting, elegant rich color grading with natural tones, sharp focus, 
+        beautiful depth of field, powerful and scroll-stopping composition. Show relevant dynamic action, genuine emotion or compelling 
+        atmosphere directly related to ${topic}. Professional sports and news photography style, ultra-realistic, photorealistic, 8k resolution, 
+        masterpiece, best quality, visually captivating and viral.`;
+
+
+    // Best image from Tavily
     let bestImage = "";
     const searchTerm = (topic || "").toLowerCase();
-
     for (let item of trendingData.topics) {
       if (item.images && item.images.length > 0) {
-        const titleLower = item.title.toLowerCase();
-        const contentLower = (item.content || "").toLowerCase();
-
-        if (titleLower.includes(searchTerm) || contentLower.includes(searchTerm)) {
+        if (item.title.toLowerCase().includes(searchTerm)) {
           bestImage = item.images[0];
           break;
         }
       }
     }
-
-    // Fallback: Pehli image le lo
     if (!bestImage && trendingData.topics[0]?.images?.length > 0) {
       bestImage = trendingData.topics[0].images[0];
     }
@@ -103,7 +106,8 @@ app.post('/generate-post', async (req, res) => {
     res.json({
       success: true,
       post: finalPost,
-      image: bestImage
+      image: bestImage,
+      grokImagePrompt: grokImagePrompt
     });
 
   } catch (e) {
